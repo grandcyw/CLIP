@@ -14,9 +14,6 @@ from torchvision.datasets import CIFAR100
 
 
 model, preprocess = clip.load("ViT-B/32")
-input_resolution = model.visual.input_resolution
-context_length = model.context_length
-vocab_size = model.vocab_size
 
 Compose([
     Resize(size=224, max_size=None, antialias=None),
@@ -24,7 +21,7 @@ Compose([
     ToTensor(),
     Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711))])
 
-clip.tokenize("Hello World!")
+print(clip.tokenize("thyroid cytology. Ciliated respiratory epithelial cells. These may be obtained from inadvertent sampling of the trachea during a thyroid FNA. (ThinPrep, Papanicolaou.) "))
 
 
 # images in skimage to use and their textual descriptions
@@ -108,6 +105,7 @@ with torch.no_grad():
     text_features /= text_features.norm(dim=-1, keepdim=True)
 
 text_probs = (100.0 * image_features @ text_features.T).softmax(dim=-1)
+print(text_probs)
 top_probs, top_labels = text_probs.cpu().topk(5, dim=-1)
 
 plt.figure(figsize=(16, 16))
