@@ -10,16 +10,10 @@ import clip
 from collections import OrderedDict
 import torch
 from torchvision.datasets import CIFAR100
-
+import get_des_from_txt as gt
 
 
 model, preprocess = clip.load("ViT-B/32")
-
-Compose([
-    Resize(size=224, max_size=None, antialias=None),
-    CenterCrop(size=224),
-    ToTensor(),
-    Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711))])
 
 print(clip.tokenize("thyroid cytology. Ciliated respiratory epithelial cells. These may be obtained from inadvertent sampling of the trachea during a thyroid FNA. (ThinPrep, Papanicolaou.) "))
 
@@ -37,11 +31,22 @@ descriptions = {
 }
 
 original_images = []
-images = []
-texts = []
-plt.figure(figsize=(16, 5))
+images=[]
+texts=[]
 
-for filename in [filename for filename in os.listdir(skimage.data_dir) if
+
+image_list=gt.get_img()
+text_dict=gt.get_des()
+
+#print(text_dict.keys())
+for img in image_list:
+    image=Image.open(img).convert("RGB")
+    img_name=img.split('\\')[-1]
+    original_images.append(image)
+    images.append(preprocess(image))
+    texts.append(text_dict[img_name])
+
+'''for filename in [filename for filename in os.listdir(skimage.data_dir) if
                  filename.endswith(".png") or filename.endswith(".jpg")]:
     name = os.path.splitext(filename)[0]
     if name not in descriptions:
@@ -57,12 +62,11 @@ for filename in [filename for filename in os.listdir(skimage.data_dir) if
 
     original_images.append(image)
     images.append(preprocess(image))
-    texts.append(descriptions[name])
-
-plt.tight_layout()
+    texts.append(descriptions[name])'''
 
 image_input = torch.tensor(np.stack(images)).cuda()
 text_tokens = clip.tokenize(["This is " + desc for desc in texts]).cuda()
+print(text_tokens)
 
 with torch.no_grad():
     image_features = model.encode_image(image_input).float()
@@ -70,59 +74,15 @@ with torch.no_grad():
 
 image_features /= image_features.norm(dim=-1, keepdim=True)
 text_features /= text_features.norm(dim=-1, keepdim=True)
+print(len(image_features),len(image_features[0]))
+print(len(text_features),len(text_features[0]))
 similarity = text_features.cpu().numpy() @ image_features.cpu().numpy().T
 
 count = len(descriptions)
+print(similarity)
 
-plt.figure(figsize=(20, 14))
-plt.imshow(similarity, vmin=0.1, vmax=0.3)
-# plt.colorbar()
-plt.yticks(range(count), texts, fontsize=18)
-plt.xticks([])
-for i, image in enumerate(original_images):
-    plt.imshow(image, extent=(i - 0.5, i + 0.5, -1.6, -0.6), origin="lower")
-for x in range(similarity.shape[1]):
-    for y in range(similarity.shape[0]):
-        plt.text(x, y, f"{similarity[y, x]:.2f}", ha="center", va="center", size=12)
-
-for side in ["left", "top", "right", "bottom"]:
-  plt.gca().spines[side].set_visible(False)
-
-plt.xlim([-0.5, count - 0.5])
-plt.ylim([count + 0.5, -2])
-
-plt.title("Cosine similarity between text and image features", size=20)
-
-
-cifar100 = CIFAR100(os.path.expanduser("~/.cache"), transform=preprocess, download=True)
-
-text_descriptions = [f"This is a photo of a {label}" for label in cifar100.classes]
-text_tokens = clip.tokenize(text_descriptions).cuda()
-
-
-with torch.no_grad():
-    text_features = model.encode_text(text_tokens).float()
-    text_features /= text_features.norm(dim=-1, keepdim=True)
 
 text_probs = (100.0 * image_features @ text_features.T).softmax(dim=-1)
 print(text_probs)
 top_probs, top_labels = text_probs.cpu().topk(5, dim=-1)
-
-plt.figure(figsize=(16, 16))
-
-for i, image in enumerate(original_images):
-    plt.subplot(4, 4, 2 * i + 1)
-    plt.imshow(image)
-    plt.axis("off")
-
-    plt.subplot(4, 4, 2 * i + 2)
-    y = np.arange(top_probs.shape[-1])
-    plt.grid()
-    plt.barh(y, top_probs[i])
-    plt.gca().invert_yaxis()
-    plt.gca().set_axisbelow(True)
-    plt.yticks(y, [cifar100.classes[index] for index in top_labels[i].numpy()])
-    plt.xlabel("probability")
-
-plt.subplots_adjust(wspace=0.5)
-plt.show()
+print(top_probs,top_labels)
